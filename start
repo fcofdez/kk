@@ -1,0 +1,7 @@
+#!/bin/bash
+
+cd /usr/local/WowzaStreamingEngine/bin
+./startup.sh & 
+cd /usr/local/WowzaStreamingEngine/manager/bin
+./startmgr.sh &
+/bin/bash
