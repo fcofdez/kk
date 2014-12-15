@@ -99,9 +99,9 @@ func GetAuthString(auth *Authorization, url *url.URL, method string, nc int) str
 }
 
 func main() {
-	streamId := "hola8"
+	streamId := "hola9"
 	streamFile := streamId + ".stream"
-	port := "10008"
+	port := "10009"
 
 	err := os.Mkdir(filepath.Join(WOWZA_HOME_APPS, streamId), 0777)
 	check(err)
@@ -129,13 +129,8 @@ func main() {
 	resp, _ := client.Do(req)
 	fmt.Println(resp)
 	if resp.StatusCode == 401 {
-		auth := GetAuthorization(username, password, resp)
-		myURL := url.URL{"http", "", nil, "http://" + WOWZA_IP + ":8086", "/streammanager/streamAction", "", ""}
-
-		a := GetAuthString(auth, &myURL, "POST", 1)
-		reqx, _ := http.NewRequest("POST", WOWZA_STREAM_API, strings.NewReader(startReq.Encode()))
-		reqx.Header.Set("Authorization", a)
-		rex, erx := client.Do(reqx)
+		SetDigestAuth(req, username, password, resp, 1)
+		rex, erx := client.Do(req)
 		check(erx)
 		fmt.Println(rex)
 	}
