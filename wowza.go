@@ -1,38 +1,22 @@
 package main
 
 import (
+	"crypto/md5"
+	"crypto/rand"
 	"encoding/base64"
+	"encoding/hex"
 	"fmt"
+	"io"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
-	// "io/ioutil"
-	"crypto/md5"
-	"crypto/rand"
-	"encoding/hex"
-	"io"
-	"log"
 )
 
-func newUUID() (string, error) {
-	uuid := make([]byte, 16)
-	n, err := io.ReadFull(rand.Reader, uuid)
-	if n != len(uuid) || err != nil {
-		return "", err
-	}
-	// variant bits; see section 4.1.1
-	uuid[8] = uuid[8]&^0xc0 | 0x80
-	// version 4 (pseudo-random); see section 4.1.3
-	uuid[6] = uuid[6]&^0xf0 | 0x40
-	return fmt.Sprintf("%x-%x-%x-%x-%x", uuid[0:4], uuid[4:6], uuid[6:8], uuid[8:10], uuid[10:]), nil
-}
-
 const WOWZA_HOME = "/usr/local/WowzaStreamingEngine/"
-
-//const WOWZA_HOME = "/home/fran/"
 const WOWZA_HOME_APPS = WOWZA_HOME + "applications/"
 const WOWZA_HOME_CONF = WOWZA_HOME + "conf/"
 const WOWZA_HOME_CONTENT = WOWZA_HOME + "content/"
@@ -93,9 +77,7 @@ func GetAuthString(auth *Authorization, url *url.URL, method string, nc int) str
 	ha2 := hex.EncodeToString(h.Sum(nil))
 
 	nc_str := fmt.Sprintf("%08x", nc)
-	uuid, _ := newUUID()
-	hnc := strings.Replace(uuid, "-", "", -1)
-	hnc = RandomKey()
+	hnc := RandomKey()
 
 	respdig := fmt.Sprintf("%s:%s:%s:%s:%s:%s", ha1, auth.Nonce, nc_str, hnc, auth.QOP, ha2)
 	h = md5.New()
@@ -114,21 +96,7 @@ func GetAuthString(auth *Authorization, url *url.URL, method string, nc int) str
 		base += fmt.Sprintf(", algorithm=%s", auth.Algorithm)
 	}
 
-	// r.Header.Add("Authorization", "Digest " +base)
 	return "Digest " + base
-}
-
-type myjar struct {
-	jar map[string][]*http.Cookie
-}
-
-func (p *myjar) SetCookies(u *url.URL, cookies []*http.Cookie) {
-	p.jar[u.Host] = cookies
-
-}
-func (p *myjar) Cookies(u *url.URL) []*http.Cookie {
-	return p.jar[u.Host]
-
 }
 
 func RandomKey() string {
@@ -147,9 +115,9 @@ func RandomKey() string {
 }
 
 func main() {
-	streamId := "test3"
+	streamId := "test346868"
 	streamFile := streamId + ".stream"
-	port := "90123"
+	port := "10018"
 
 	err := os.Mkdir(filepath.Join(WOWZA_HOME_APPS, streamId), 0777)
 	check(err)
@@ -167,12 +135,10 @@ func main() {
 	write_err = ioutil.WriteFile(stream_path, []byte(streamLoc), 0644)
 	check(write_err)
 	startReq := url.Values{"action": {"startStream"},
-		"appName": {"live"}, "streamName": {streamFile}, "mediaCasterType": {"rtp"}}
+		"appName": {streamId + "/_definst_"}, "streamName": {streamFile},
+		"mediaCasterType": {"rtp"}, "vhostName": {"undefined"}}
 
 	client := &http.Client{}
-	jar := &myjar{}
-	jar.jar = make(map[string][]*http.Cookie)
-	client.Jar = jar
 
 	req, _ := http.NewRequest("POST", WOWZA_STREAM_API, strings.NewReader(startReq.Encode()))
 	username := "rushmore"
@@ -180,17 +146,9 @@ func main() {
 	resp, _ := client.Do(req)
 
 	if resp.StatusCode == 401 {
-		req, _ := http.NewRequest("POST", WOWZA_STREAM_API, nil)
-		SetDigestAuth(req, username, password, resp, 1)
-
-		// transport := http.Transport{}
-		// rex, erx := transport.RoundTrip(req)
-		rex, erx := client.Do(req)
-		defer resp.Body.Close()
-		body, ear := ioutil.ReadAll(rex.Body)
-		check(ear)
-		fmt.Println(string(body))
+		reqx, _ := http.NewRequest("POST", WOWZA_STREAM_API, strings.NewReader(startReq.Encode()))
+		SetDigestAuth(reqx, username, password, resp, 1)
+		_, erx := client.Do(reqx)
 		check(erx)
-		fmt.Println(rex)
 	}
 }
