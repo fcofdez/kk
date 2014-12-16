@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -10,9 +11,24 @@ import (
 	"strings"
 	// "io/ioutil"
 	"crypto/md5"
+	"crypto/rand"
 	"encoding/hex"
 	"io"
+	"log"
 )
+
+func newUUID() (string, error) {
+	uuid := make([]byte, 16)
+	n, err := io.ReadFull(rand.Reader, uuid)
+	if n != len(uuid) || err != nil {
+		return "", err
+	}
+	// variant bits; see section 4.1.1
+	uuid[8] = uuid[8]&^0xc0 | 0x80
+	// version 4 (pseudo-random); see section 4.1.3
+	uuid[6] = uuid[6]&^0xf0 | 0x40
+	return fmt.Sprintf("%x-%x-%x-%x-%x", uuid[0:4], uuid[4:6], uuid[6:8], uuid[8:10], uuid[10:]), nil
+}
 
 const WOWZA_HOME = "/usr/local/WowzaStreamingEngine/"
 
@@ -27,19 +43,19 @@ const WOWZA_ADMIN_PASS = "rushmore"
 
 func check(err error) {
 	if err != nil {
+		log.Fatal(err.Error())
 		panic(err)
 	}
 }
 
 type Authorization struct {
-	Username, Password, Realm, NONCE, QOP, Opaque, Algorithm string
+	Username, Password, Realm, Nonce, QOP, Opaque, Algorithm string
 }
 
 func GetAuthorization(username, password string, resp *http.Response) *Authorization {
 	header := resp.Header.Get("www-authenticate")
 	parts := strings.SplitN(header, " ", 2)
 	parts = strings.Split(parts[1], ", ")
-	fmt.Println("Parts: ", parts)
 	opts := make(map[string]string)
 
 	for _, part := range parts {
@@ -52,8 +68,9 @@ func GetAuthorization(username, password string, resp *http.Response) *Authoriza
 
 	auth := Authorization{
 		username, password,
-		opts["realm"], opts["nonce"], opts["qop"], opts["opaque"], opts["algorithm"],
+		opts["realm"], opts[" nonce"], opts["qop"], opts["opaque"], opts["algorithm"],
 	}
+
 	return &auth
 }
 
@@ -61,6 +78,7 @@ func SetDigestAuth(r *http.Request, username, password string, resp *http.Respon
 	auth := GetAuthorization(username, password, resp)
 	auth_str := GetAuthString(auth, r.URL, r.Method, nc)
 	r.Header.Add("Authorization", auth_str)
+	fmt.Println(r.Header)
 }
 
 func GetAuthString(auth *Authorization, url *url.URL, method string, nc int) string {
@@ -75,33 +93,63 @@ func GetAuthString(auth *Authorization, url *url.URL, method string, nc int) str
 	ha2 := hex.EncodeToString(h.Sum(nil))
 
 	nc_str := fmt.Sprintf("%08x", nc)
-	hnc := "MTM3MDgw"
+	uuid, _ := newUUID()
+	hnc := strings.Replace(uuid, "-", "", -1)
+	hnc = RandomKey()
 
-	respdig := fmt.Sprintf("%s:%s:%s:%s:%s:%s", ha1, auth.NONCE, nc_str, hnc, auth.QOP, ha2)
+	respdig := fmt.Sprintf("%s:%s:%s:%s:%s:%s", ha1, auth.Nonce, nc_str, hnc, auth.QOP, ha2)
 	h = md5.New()
 	io.WriteString(h, respdig)
 	respdig = hex.EncodeToString(h.Sum(nil))
 
 	base := "username=\"%s\", realm=\"%s\", nonce=\"%s\", uri=\"%s\", response=\"%s\""
-	base = fmt.Sprintf(base, auth.Username, auth.Realm, auth.NONCE, url.Path, respdig)
+	base = fmt.Sprintf(base, auth.Username, auth.Realm, auth.Nonce, url.Path, respdig)
 	if auth.Opaque != "" {
 		base += fmt.Sprintf(", opaque=\"%s\"", auth.Opaque)
 	}
 	if auth.QOP != "" {
-		base += fmt.Sprintf(", qop=\"%s\", nc=%s, cnonce=\"%s\"", auth.QOP, nc_str, hnc)
+		base += fmt.Sprintf(", qop=%s, nc=%s, cnonce=\"%s\"", auth.QOP, nc_str, hnc)
 	}
 	if auth.Algorithm != "" {
-		base += fmt.Sprintf(", algorithm=\"%s\"", auth.Algorithm)
+		base += fmt.Sprintf(", algorithm=%s", auth.Algorithm)
 	}
 
 	// r.Header.Add("Authorization", "Digest " +base)
 	return "Digest " + base
 }
 
+type myjar struct {
+	jar map[string][]*http.Cookie
+}
+
+func (p *myjar) SetCookies(u *url.URL, cookies []*http.Cookie) {
+	p.jar[u.Host] = cookies
+
+}
+func (p *myjar) Cookies(u *url.URL) []*http.Cookie {
+	return p.jar[u.Host]
+
+}
+
+func RandomKey() string {
+	k := make([]byte, 12)
+	for bytes := 0; bytes < len(k); {
+		n, err := rand.Read(k[bytes:])
+		if err != nil {
+			panic("rand.Read() failed")
+
+		}
+		bytes += n
+
+	}
+	return base64.StdEncoding.EncodeToString(k)
+
+}
+
 func main() {
-	streamId := "hola9"
+	streamId := "test3"
 	streamFile := streamId + ".stream"
-	port := "10009"
+	port := "90123"
 
 	err := os.Mkdir(filepath.Join(WOWZA_HOME_APPS, streamId), 0777)
 	check(err)
@@ -122,15 +170,26 @@ func main() {
 		"appName": {"live"}, "streamName": {streamFile}, "mediaCasterType": {"rtp"}}
 
 	client := &http.Client{}
+	jar := &myjar{}
+	jar.jar = make(map[string][]*http.Cookie)
+	client.Jar = jar
 
 	req, _ := http.NewRequest("POST", WOWZA_STREAM_API, strings.NewReader(startReq.Encode()))
 	username := "rushmore"
 	password := "rushmore"
 	resp, _ := client.Do(req)
-	fmt.Println(resp)
+
 	if resp.StatusCode == 401 {
+		req, _ := http.NewRequest("POST", WOWZA_STREAM_API, nil)
 		SetDigestAuth(req, username, password, resp, 1)
+
+		// transport := http.Transport{}
+		// rex, erx := transport.RoundTrip(req)
 		rex, erx := client.Do(req)
+		defer resp.Body.Close()
+		body, ear := ioutil.ReadAll(rex.Body)
+		check(ear)
+		fmt.Println(string(body))
 		check(erx)
 		fmt.Println(rex)
 	}
