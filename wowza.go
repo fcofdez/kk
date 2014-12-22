@@ -1,13 +1,16 @@
 package main
 
 import (
+	"encoding/json"
 	"github.com/fcofdez/httpdigest"
+	"github.com/go-martini/martini"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -27,16 +30,15 @@ func check(err error) {
 	}
 }
 
-func main() {
-	streamId := "test346868"
-	streamFile := streamId + ".stream"
-	port := "10018"
-
+func createDirs(streamId string) {
 	err := os.Mkdir(filepath.Join(WOWZA_HOME_APPS, streamId), 0777)
 	check(err)
 	err = os.Mkdir(filepath.Join(WOWZA_HOME_CONF, streamId), 0777)
 	check(err)
+}
 
+func createConfFiles(streamId, port string) string {
+	streamFile := streamId + ".stream"
 	confDir := filepath.Join(WOWZA_HOME_CONF, streamId)
 	dat, err := ioutil.ReadFile("Application.xml")
 	check(err)
@@ -47,6 +49,10 @@ func main() {
 	stream_path := filepath.Join(WOWZA_HOME_CONTENT, streamFile)
 	write_err = ioutil.WriteFile(stream_path, []byte(streamLoc), 0644)
 	check(write_err)
+	return streamFile
+}
+
+func createWowzaApp(streamId, streamFile string) {
 	startReq := url.Values{"action": {"startStream"},
 		"appName": {streamId + "/_definst_"}, "streamName": {streamFile},
 		"mediaCasterType": {"rtp"}, "vhostName": {"undefined"}}
@@ -64,4 +70,37 @@ func main() {
 		_, erx := client.Do(reqx)
 		check(erx)
 	}
+}
+
+type Broadcast struct {
+	archiveId string
+}
+
+func calculatePort(archiveId string) int64 {
+	portId := strings.Split(archiveId, "-")[0]
+	hexId, _ := strconv.ParseInt(portId, 16, 64)
+	return (10000 + hexId) % 30011
+}
+
+func generateWowzaStream(streamId, port string) {
+	createDirs(streamId)
+	streamFile := createConfFiles(streamId, port)
+	createWowzaApp(streamId, streamFile)
+}
+
+func main() {
+	m := martini.Classic()
+	m.Post("/streams/", func(c martini.Context, req *http.Request) {
+		decoder := json.NewDecoder(req.Body)
+		var broadcast Broadcast
+		decoder.Decode(&broadcast)
+		port := calculatePort(broadcast.archiveId)
+		streamId := broadcast.archiveId
+		generateWowzaStream(streamId, string(port))
+	})
+	m.Delete("/streams/:archive_id", func(params martini.Params) string {
+		return params["archive_id"]
+	})
+
+	m.Run()
 }
