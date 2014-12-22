@@ -73,12 +73,12 @@ func createWowzaApp(streamId, streamFile string) {
 }
 
 type Broadcast struct {
-	archiveId string
+	Id string
 }
 
 func calculatePort(archiveId string) int64 {
 	portId := strings.Split(archiveId, "-")[0]
-	hexId, _ := strconv.ParseInt(portId, 16, 64)
+	hexId, _ := strconv.ParseInt(portId, 16, 0)
 	return (10000 + hexId) % 30011
 }
 
@@ -94,12 +94,12 @@ func main() {
 		decoder := json.NewDecoder(req.Body)
 		var broadcast Broadcast
 		decoder.Decode(&broadcast)
-		port := calculatePort(broadcast.archiveId)
-		streamId := broadcast.archiveId
-		generateWowzaStream(streamId, string(port))
+		port := calculatePort(broadcast.Id)
+		streamId := broadcast.Id
+		generateWowzaStream(streamId, strconv.FormatInt(port, 10))
 	})
-	m.Delete("/streams/:archive_id", func(params martini.Params) string {
-		return params["archive_id"]
+	m.Delete("/streams/:archiveid", func(params martini.Params) string {
+		return params["archiveid"]
 	})
 
 	m.Run()
