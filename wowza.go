@@ -1,8 +1,8 @@
 package main
 
 import (
+	"github.com/fcofdez/httpdigest"
 	"io/ioutil"
-	"kk/httpdigest"
 	"log"
 	"net/http"
 	"net/url"
