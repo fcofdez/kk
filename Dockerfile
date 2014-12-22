@@ -17,8 +17,6 @@ RUN echo oracle-java7-installer shared/accepted-oracle-license-v1-1 select true 
     apt-get install -qq oracle-java7-installer && \
     apt-get clean
 
-RUN apt-get install -y nodejs npm vim
-
 # DOCKER ENTRIES
 EXPOSE 8083 8086 1935
 ENTRYPOINT ["/start"]
