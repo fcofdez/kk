@@ -96,7 +96,7 @@ type Broadcast struct {
 func calculatePort(archiveId string) int64 {
 	portId := strings.Split(archiveId, "-")[0]
 	hexId, _ := strconv.ParseInt(portId, 16, 0)
-	return (10000 + hexId) % 30011
+	return 10000 + hexId%30011
 }
 
 func generateWowzaApp(streamId, port string) {
