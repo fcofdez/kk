@@ -112,13 +112,17 @@ func deleteWowzaApp(streamId, port string) {
 
 func main() {
 	m := martini.Classic()
-	m.Post("/streams/", func(c martini.Context, req *http.Request) {
+	m.Post("/streams/", func(c martini.Context, req *http.Request) (int, string) {
 		decoder := json.NewDecoder(req.Body)
 		var broadcast Broadcast
 		decoder.Decode(&broadcast)
+		if broadcast.Id == "" {
+			return 403, "Not archive id given."
+		}
 		port := calculatePort(broadcast.Id)
 		streamId := broadcast.Id
 		generateWowzaApp(streamId, strconv.FormatInt(port, 10))
+		return 200, ""
 	})
 	m.Delete("/streams/:archiveid", func(params martini.Params) {
 		port := calculatePort(params["archiveid"])
