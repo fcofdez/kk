@@ -18,7 +18,7 @@ const WOWZA_HOME = "/usr/local/WowzaStreamingEngine/"
 const WOWZA_HOME_APPS = WOWZA_HOME + "applications/"
 const WOWZA_HOME_CONF = WOWZA_HOME + "conf/"
 const WOWZA_HOME_CONTENT = WOWZA_HOME + "content/"
-const WOWZA_IP = "127.0.0.1"
+const WOWZA_IP = ""
 const WOWZA_STREAM_API = "http://" + WOWZA_IP + ":8086" + "/streammanager/streamAction"
 const WOWZA_ADMIN_USER = "rushmore"
 const WOWZA_ADMIN_PASS = "rushmore"
@@ -112,28 +112,46 @@ func deleteWowzaApp(streamId, port string) {
 	removeDirs(streamId)
 }
 
+func createLoggerFile() *log.Logger {
+	file, err := os.OpenFile("/logs/wowzaapi.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	if err != nil {
+		log.Fatalln("Failed to open log file")
+	}
+
+	logger := log.New(file,
+		"Log: ",
+		log.Ldate|log.Ltime|log.Lshortfile)
+	return logger
+}
+
 func main() {
+	logger := createLoggerFile()
 	m := martini.Classic()
 	m.Post("/streams/", func(c martini.Context, req *http.Request) (int, string) {
 		decoder := json.NewDecoder(req.Body)
 		var broadcast Broadcast
 		decoder.Decode(&broadcast)
 		if broadcast.Id == "" {
-			return 400, "Not archive id given."
+			logger.Println("Error: Not Archive id given.")
+			return 400, "Not Archive id givenn."
 		}
 		port := calculatePort(broadcast.Id)
 		streamId := broadcast.Id
 		generateWowzaApp(streamId, strconv.FormatInt(port, 10))
 		archives[broadcast.Id] = port
+		logger.Println("Stream created:", broadcast.Id, port)
 		return 200, ""
 	})
 	m.Delete("/streams/:archiveid", func(params martini.Params) (int, string) {
 		port := calculatePort(params["archiveid"])
 		streamId := params["archiveid"]
 		if archives[streamId] == 0 {
+			logger.Println("Error trying to delete stream with archive id: ", params["archiveid"])
 			return 404, "Not found"
 		}
 		deleteWowzaApp(streamId, strconv.FormatInt(port, 10))
+		logger.Println("Stream deleted:", params["archiveid"])
+		delete(archives, params["archiveid"])
 		return 200, ""
 	})
 
