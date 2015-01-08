@@ -117,7 +117,7 @@ func main() {
 		var broadcast Broadcast
 		decoder.Decode(&broadcast)
 		if broadcast.Id == "" {
-			return 403, "Not archive id given."
+			return 400, "Not archive id given."
 		}
 		port := calculatePort(broadcast.Id)
 		streamId := broadcast.Id
