@@ -23,6 +23,8 @@ const WOWZA_STREAM_API = "http://" + WOWZA_IP + ":8086" + "/streammanager/stream
 const WOWZA_ADMIN_USER = "rushmore"
 const WOWZA_ADMIN_PASS = "rushmore"
 
+var archives = make(map[string]int64)
+
 func check(err error) {
 	if err != nil {
 		log.Fatal(err.Error())
@@ -122,13 +124,17 @@ func main() {
 		port := calculatePort(broadcast.Id)
 		streamId := broadcast.Id
 		generateWowzaApp(streamId, strconv.FormatInt(port, 10))
+		archives[broadcast.Id] = port
 		return 200, ""
 	})
-	m.Delete("/streams/:archiveid", func(params martini.Params) {
+	m.Delete("/streams/:archiveid", func(params martini.Params) (int, string) {
 		port := calculatePort(params["archiveid"])
 		streamId := params["archiveid"]
+		if archives[streamId] == 0 {
+			return 404, "Not found"
+		}
 		deleteWowzaApp(streamId, strconv.FormatInt(port, 10))
-
+		return 200, ""
 	})
 
 	m.Run()
