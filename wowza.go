@@ -44,6 +44,10 @@ func removeDirs(streamId string) {
 	check(err)
 	err = os.RemoveAll(filepath.Join(WOWZA_HOME_CONF, streamId))
 	check(err)
+	streamFile := streamId + ".stream"
+	stream_path := filepath.Join(WOWZA_HOME_CONTENT, streamFile)
+	err = os.Remove(stream_path)
+	check(err)
 }
 
 func createConfFiles(streamId, port string) string {
